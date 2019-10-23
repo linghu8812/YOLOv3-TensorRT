@@ -1,0 +1,7 @@
+darknet
+*.jpg
+*.png
+*.onnx
+*.trt
+*.weights
+__pycache__/
