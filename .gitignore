@@ -5,3 +5,4 @@ darknet
 *.trt
 *.weights
 __pycache__/
+.idea/
