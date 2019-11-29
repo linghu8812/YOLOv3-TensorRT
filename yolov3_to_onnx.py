@@ -503,6 +503,12 @@ class GraphBuilderONNX(object):
         ) and layer_dict['batch_normalize'] == 1:
             batch_normalize = True
 
+        groups = 1
+        if 'groups' in layer_dict.keys():
+            groups = layer_dict['groups']
+
+        previous_channels = previous_channels // groups
+
         kernel_shape = [kernel_size, kernel_size]
         weights_shape = [filters, previous_channels] + kernel_shape
         conv_params = ConvParams(layer_name, batch_normalize, weights_shape)
@@ -521,6 +527,7 @@ class GraphBuilderONNX(object):
             outputs=[layer_name],
             kernel_shape=kernel_shape,
             strides=strides,
+            group=groups,
             auto_pad='SAME_LOWER',
             dilations=dilations,
             name=layer_name
@@ -560,6 +567,18 @@ class GraphBuilderONNX(object):
             self._nodes.append(lrelu_node)
             inputs = [layer_name_lrelu]
             layer_name_output = layer_name_lrelu
+        elif layer_dict['activation'] == 'relu':
+            layer_name_relu = layer_name + '_relu'
+
+            relu_node = helper.make_node(
+                'Relu',
+                inputs=inputs,
+                outputs=[layer_name_relu],
+                name=layer_name_relu
+            )
+            self._nodes.append(relu_node)
+            inputs = [layer_name_relu]
+            layer_name_output = layer_name_relu
         elif layer_dict['activation'] == 'linear':
             pass
         else:
@@ -693,12 +712,22 @@ def main(cfg_file='yolov3.cfg', weights_file='yolov3.weights', output_file='yolo
 
     width = layer_configs['000_net']['width']
     height = layer_configs['000_net']['height']
-    classes = layer_configs['083_yolo']['classes']
+    # classes = layer_configs['083_yolo']['classes']
+
+    conv_layers = []
+    for layer_key in layer_configs.keys():
+        if 'conv' in layer_key:
+            conv_layer = layer_key
+        if 'yolo' in layer_key:
+            yolo_layer = layer_key
+            conv_layers.append(conv_layer)
+
+    classes = layer_configs[yolo_layer]['classes']
 
     output_tensor_dims = OrderedDict()
-    output_tensor_dims['082_convolutional'] = [(classes + 5) * 3, width // 32, height // 32]
-    output_tensor_dims['094_convolutional'] = [(classes + 5) * 3, width // 16, height // 16]
-    output_tensor_dims['106_convolutional'] = [(classes + 5) * 3, width // 8, height // 8]
+    output_tensor_dims[conv_layers[0]] = [(classes + 5) * 3, width // 32, height // 32]
+    output_tensor_dims[conv_layers[1]] = [(classes + 5) * 3, width // 16, height // 16]
+    output_tensor_dims[conv_layers[2]] = [(classes + 5) * 3, width // 8, height // 8]
 
     # Create a GraphBuilderONNX object with the known output tensor dimensions:
     builder = GraphBuilderONNX(output_tensor_dims)
