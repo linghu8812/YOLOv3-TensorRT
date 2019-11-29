@@ -1,8 +1,11 @@
-darknet
+__pycache__/
+.idea/
+
 *.jpg
 *.png
 *.onnx
 *.trt
 *.weights
-__pycache__/
-.idea/
+*.txt
+*.cfg
+
