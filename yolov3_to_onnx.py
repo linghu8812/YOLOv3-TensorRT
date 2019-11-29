@@ -712,12 +712,22 @@ def main(cfg_file='yolov3.cfg', weights_file='yolov3.weights', output_file='yolo
 
     width = layer_configs['000_net']['width']
     height = layer_configs['000_net']['height']
-    classes = layer_configs['083_yolo']['classes']
+    # classes = layer_configs['083_yolo']['classes']
+
+    conv_layers = []
+    for layer_key in layer_configs.keys():
+        if 'conv' in layer_key:
+            conv_layer = layer_key
+        if 'yolo' in layer_key:
+            yolo_layer = layer_key
+            conv_layers.append(conv_layer)
+
+    classes = layer_configs[yolo_layer]['classes']
 
     output_tensor_dims = OrderedDict()
-    output_tensor_dims['070_convolutional'] = [(classes + 5) * 3, width // 32, height // 32]
-    output_tensor_dims['082_convolutional'] = [(classes + 5) * 3, width // 16, height // 16]
-    output_tensor_dims['094_convolutional'] = [(classes + 5) * 3, width // 8, height // 8]
+    output_tensor_dims[conv_layers[0]] = [(classes + 5) * 3, width // 32, height // 32]
+    output_tensor_dims[conv_layers[1]] = [(classes + 5) * 3, width // 16, height // 16]
+    output_tensor_dims[conv_layers[2]] = [(classes + 5) * 3, width // 8, height // 8]
 
     # Create a GraphBuilderONNX object with the known output tensor dimensions:
     builder = GraphBuilderONNX(output_tensor_dims)
