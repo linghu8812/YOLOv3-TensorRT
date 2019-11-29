@@ -62,14 +62,6 @@ def load_label_categories(label_file_path):
     return categories
 
 
-LABEL_FILE_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'voc_labels.txt')
-ALL_CATEGORIES = load_label_categories(LABEL_FILE_PATH)
-
-# Let's make sure that there are 80 classes, as expected for the COCO data set:
-CATEGORY_NUM = len(ALL_CATEGORIES)
-assert CATEGORY_NUM == 20
-
-
 class PreprocessYOLO(object):
     """A simple class for loading images with PIL and reshaping them to the specified
     input resolution for YOLOv3-608.
@@ -161,7 +153,7 @@ class PostprocessYOLO(object):
         self.nms_threshold = nms_threshold
         self.input_resolution_yolo = yolo_input_resolution
 
-    def process(self, outputs, resolution_raw):
+    def process(self, outputs, resolution_raw, classes=80):
         """Take the YOLOv3 outputs generated from a TensorRT forward pass, post-process them
         and return a list of bounding boxes for detected object together with their category
         and their confidences in separate lists.
@@ -172,14 +164,14 @@ class PostprocessYOLO(object):
         """
         outputs_reshaped = list()
         for output in outputs:
-            outputs_reshaped.append(self._reshape_output(output))
+            outputs_reshaped.append(self._reshape_output(output, classes))
 
         boxes, categories, confidences = self._process_yolo_output(
             outputs_reshaped, resolution_raw)
 
         return boxes, categories, confidences
 
-    def _reshape_output(self, output):
+    def _reshape_output(self, output, classes):
         """Reshape a TensorRT output from NCHW to NHWC format (with expected C=255),
         and then return it in (height,width,3,85) dimensionality after further reshaping.
 
@@ -191,7 +183,7 @@ class PostprocessYOLO(object):
         dim1, dim2 = height, width
         dim3 = 3
         # There are CATEGORY_NUM=80 object categories:
-        dim4 = (4 + 1 + CATEGORY_NUM)
+        dim4 = (4 + 1 + classes)
         return np.reshape(output, (dim1, dim2, dim3, dim4))
 
     def _process_yolo_output(self, outputs_reshaped, resolution_raw):
