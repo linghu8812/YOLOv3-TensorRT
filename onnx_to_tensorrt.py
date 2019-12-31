@@ -54,18 +54,21 @@ def draw_bboxes(image_raw, bboxes, confidences, categories, all_categories, bbox
     return image_raw
 
 
-def get_engine(onnx_file_path, engine_file_path="", int8mode=False, calib_file='yolo_calibration.cache'):
+def get_engine(onnx_file_path, width=608, height=608, batch_size=1, engine_file_path="", int8mode=False,
+               calib_file='yolo_calibration.cache'):
     """Attempts to load a serialized engine if available, otherwise builds a new TensorRT engine and saves it."""
     def build_engine():
         """Takes an ONNX file and creates a TensorRT engine to run inference with"""
-        with trt.Builder(TRT_LOGGER) as builder, builder.create_network() as network, trt.OnnxParser(network, TRT_LOGGER) as parser:
+        with trt.Builder(TRT_LOGGER) as builder, builder.create_network() as network, \
+                trt.OnnxParser(network, TRT_LOGGER) as parser:
             builder.max_workspace_size = 1 << 28  # 256MiB
-            builder.max_batch_size = 1
+            builder.max_batch_size = batch_size
             if int8mode:
                 # calibrator definition
                 calibration_dataset_loc = "calibration_dataset/"
                 calibration_cache = calib_file
-                calib = calibrator.PythonEntropyCalibrator(calibration_dataset_loc, cache_file=calibration_cache)
+                calib = calibrator.PythonEntropyCalibrator(calibration_dataset_loc, cache_file=calibration_cache,
+                                                           width=width, height=height, batch_size=batch_size)
                 builder.int8_mode = True
                 builder.int8_calibrator = calib
             else:
@@ -95,7 +98,7 @@ def get_engine(onnx_file_path, engine_file_path="", int8mode=False, calib_file='
         return build_engine()
 
 
-def main(width=608, height=608, dataset='coco_label.txt', int8mode=False, calib_file='yolo_calibration.cache',
+def main(width=608, height=608, batch_size=1, dataset='coco_label.txt', int8mode=False, calib_file='yolo_calibration.cache',
          onnx_file='yolov3.onnx', engine_file='yolov3.trt', image_file='dog.jpg', result_file='dog_bboxes.png'):
 
     """Load labels of the correspond dataset."""
@@ -115,16 +118,17 @@ def main(width=608, height=608, dataset='coco_label.txt', int8mode=False, calib_
     # Create a pre-processor object by specifying the required input resolution for YOLOv3
     preprocessor = PreprocessYOLO(input_resolution_yolov3_HW)
     # Load an image from the specified input path, and return it together with  a pre-processed version
-    image_raw, image = preprocessor.process(input_image_path)
+    image_raw, image = preprocessor.process(input_image_path, batch_size)
     # Store the shape of the original input image in WH format, we will need it for later
     shape_orig_WH = image_raw.size
 
     # Output shapes expected by the post-processor
-    output_shapes = [(1, (classes + 5) * 3, height // 32, width // 32),
-                     (1, (classes + 5) * 3, height // 16, width // 16),
-                     (1, (classes + 5) * 3, height // 8,  width // 8)]
+    output_shapes = [(batch_size, (classes + 5) * 3, height // 32, width // 32),
+                     (batch_size, (classes + 5) * 3, height // 16, width // 16),
+                     (batch_size, (classes + 5) * 3, height // 8,  width // 8)]
     # Do inference with TensorRT
-    with get_engine(onnx_file_path, engine_file_path, int8mode, calib_file) as engine, engine.create_execution_context() as context:
+    with get_engine(onnx_file_path, width, height, batch_size, engine_file_path, int8mode, calib_file) as engine, \
+            engine.create_execution_context() as context:
         start = time.time()
         inputs, outputs, bindings, stream = common.allocate_buffers(engine)
         # Do inference
@@ -147,7 +151,10 @@ def main(width=608, height=608, dataset='coco_label.txt', int8mode=False, calib_
     postprocessor = PostprocessYOLO(**postprocessor_args)
 
     # Run the post-processing algorithms on the TensorRT outputs and get the bounding box details of detected objects
-    boxes, classes, scores = postprocessor.process(trt_outputs, (shape_orig_WH), classes)
+    trt_outputs_1 = [np.expand_dims(trt_outputs[0][0], axis=0),
+                     np.expand_dims(trt_outputs[1][0], axis=0),
+                     np.expand_dims(trt_outputs[2][0], axis=0)]
+    boxes, classes, scores = postprocessor.process(trt_outputs_1, (shape_orig_WH), classes)
     # Draw the bounding boxes onto the original input image and save it as a PNG file
     obj_detected_img = draw_bboxes(image_raw, boxes, scores, classes, all_categories)
     output_image_path = result_file
@@ -159,6 +166,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Sample of YOLOv3 TensorRT.')
     parser.add_argument('--width', type=int, default=608, help='image width')
     parser.add_argument('--height', type=int, default=608, help='image height')
+    parser.add_argument('--batch_size', type=int, default=1, help='image height')
     parser.add_argument('--dataset', type=str, default='coco_labels.txt', help='dataset classes names label')
     parser.add_argument('--int8', action='store_true', help='set int8 mode')
     parser.add_argument('--calib_file', type=str, default='yolo_calibration.cache', help='int8 calibration file')
@@ -168,5 +176,5 @@ if __name__ == '__main__':
     parser.add_argument('--result_file', type=str, default='dog_bboxes.png', help='result file')
     args = parser.parse_args()
     print(args)
-    main(args.width, args.height, args.dataset, args.int8, args.calib_file, args.onnx_file, args.engine_file,
+    main(args.width, args.height, args.batch_size, args.dataset, args.int8, args.calib_file, args.onnx_file, args.engine_file,
          args.image_file, args.result_file)

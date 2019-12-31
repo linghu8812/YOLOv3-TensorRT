@@ -10,8 +10,9 @@ from data_processing import PreprocessYOLO
 # For reading size information ftch.shaperom batches
 import struct
 
+
 class PythonEntropyCalibrator(trt.IInt8EntropyCalibrator2):
-    def __init__(self, batch_data_dir, cache_file):
+    def __init__(self, batch_data_dir, cache_file, width=608, height=608, batch_size=1):
         # Whenever you specify a custom constructor for a TensorRT class,
         # you MUST call the constructor of the parent explicitly.
         trt.IInt8EntropyCalibrator2.__init__(self)
@@ -21,8 +22,10 @@ class PythonEntropyCalibrator(trt.IInt8EntropyCalibrator2):
         self.batch_files = [os.path.join(batch_data_dir, f) for f in os.listdir(batch_data_dir)]
 
         # Find out the shape of a batch and then allocate a device buffer of that size.
-        self.batch_size = 1
-        self.batch_round = 100
+        self.width = width
+        self.height = height
+        self.batch_size = batch_size
+        self.batch_round = len(self.batch_files) // self.batch_size
         self.shape = self.read_batch_file(self.batch_files[0:self.batch_size]).shape
         print(self.shape)
         # Each element of the calibration data is a float32.
@@ -42,13 +45,13 @@ class PythonEntropyCalibrator(trt.IInt8EntropyCalibrator2):
     # aggregate data from multiple files, or use only data from portions of a file.
     def read_batch_file(self, filename):
         batch = []
-        input_resolution_yolov3_HW = (608, 608)
+        input_resolution_yolov3_HW = (self.width, self.height)
         for img_path in filename:
             preprocessor = PreprocessYOLO(input_resolution_yolov3_HW)
             image = preprocessor.process(img_path)
             batch.append(image[1])
         batch = np.array(batch)
-        batch.shape = self.batch_size, 3, 608, 608
+        batch.shape = self.batch_size, 3, self.height, self.width
             
         return batch
 
