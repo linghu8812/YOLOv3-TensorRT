@@ -1,5 +1,9 @@
 # YOLOv3 Object Detection with the ONNX TensorRT Backend In Python
 
+**Information**
+- [YOLOv3-TensorRT](https://github.com/linghu8812/YOLOv3-TensorRT) has benn deprecated. Please see [tensorrt_inference/Yolov4](https://github.com/linghu8812/tensorrt_inference/tree/master/Yolov4), which has updated new YOLO models includes YOLOv3-SPP, YOLOv3-tiny, YOLOv4, YOLOv4-tiny, YOLOv4x-mish an so on. 
+
+
 **Table Of Contents**
 - [Introduction](#introduction)
 - [Prerequisites](#prerequisites)
